@@ -1,3 +1,4 @@
+#Librerias obligatorias
 import os
 from dotenv import load_dotenv
 import streamlit as st
@@ -9,8 +10,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client_openai = OpenAI(api_key=OPENAI_API_KEY)
 model_openai = "gpt-5.4-mini"
 
-st.title("📊 Invest AI")
-st.caption("💰Inversiones simplificadas")
+st.title("📊 Capital Eye")
+st.caption("💰Herramienta informativa para inversionistas")
 
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "¿En qué te puedo ayudar?"}]
@@ -21,7 +22,7 @@ for msg in st.session_state.messages:
 if prompt:= st.chat_input("Escribe tu mensaje aquí..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
-    conversation = [{"role": "assistant", "content": "Eres un experto en inversiones, finanzas y bolsa de valores. Ayuda al usuario a entender mejor las inversiones. Responde siempre en español."}]
+    conversation = [{"role": "assistant", "content": "Eres un experto en inversiones, finanzas y bolsa de valores. Ayuda al usuario a entender mejor las inversiones y mercado financiero. Responde siempre en español."}]
     conversation.extend({"role": m["role"], "content": m["content"]} for m in st.session_state.messages)
 
     with st.chat_message("assistant"):
