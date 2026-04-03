@@ -32,7 +32,7 @@ if prompt:= st.chat_input("Escribe tu mensaje aquí..."):
     conversation.extend({"role": m["role"], "content": m["content"]} for m in st.session_state.messages)
 
     with st.chat_message("assistant"):
-        stream = client_deepseek.chat.completions.create(model=model_deepseek, messages=conversation, stream=True)
+        stream = client_openai.chat.completions.create(model=model_openai, messages=conversation, stream=True)
         response = st.write_stream(stream)
 
     st.session_state.messages.append({"role": "assistant", "content": response})
