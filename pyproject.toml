@@ -5,8 +5,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "matplotlib>=3.10.8",
     "openai>=2.30.0",
+    "plotly>=6.6.0",
     "python-dotenv>=1.2.2",
+    "seaborn>=0.13.2",
     "streamlit>=1.56.0",
     "watchdog>=6.0.0",
 ]
