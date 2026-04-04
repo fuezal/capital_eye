@@ -9,7 +9,9 @@ dependencies = [
     "openai>=2.30.0",
     "plotly>=6.6.0",
     "python-dotenv>=1.2.2",
+    "requests>=2.33.1",
     "seaborn>=0.13.2",
     "streamlit>=1.56.0",
+    "uvicorn>=0.43.0",
     "watchdog>=6.0.0",
 ]
