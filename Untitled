@@ -23,34 +23,6 @@ import time
 import requests
 import plotly.express as px
 
-# ========================================================================================================================
-# LOGO
-# ========================================================================================================================
-
-# Configuración de la página
-st.set_page_config(layout="wide")
-
-# Barra superior con fondo negro solo con el logo
-logo_bar = """
-<div style="background-color: #000000; padding: 10px 20px; display: flex; align-items: center; justify-content: flex-start;">
-    <!-- Logo SVG -->
-    <svg width="120" height="50" viewBox="0 0 420 100">
-        <circle cx="50" cy="50" r="28" stroke="#1E40FF" stroke-width="6" fill="none"/>
-        <circle cx="50" cy="50" r="18" fill="#1E40FF"/>
-        <text x="100" y="60" font-family="Arial" font-size="40" style="font-weight:bold" fill="#38D6C4">
-        CAPITAL
-        </text>
-        <text x="270" y="60" font-family="Arial" font-size="40" style="font-weight:bold" fill="#D1D5DB">
-        EYE
-        </text>
-    </svg>
-</div>
-"""
-# Mostrar barra superior
-st.markdown(logo_bar, unsafe_allow_html=True)
-
-# Contenido del dashboard
-st.write("Herramienta financiera")
 
 # ========================================================================================================================
 # NOTICIAS
@@ -569,7 +541,7 @@ df_display = panorama_df3[cols].rename(columns=rename_dict)
 st.dataframe(df_display.tail(), hide_index=True)
 
 # --------------------- noticias ---------------------
-st.title("📊 Noticias Financieras del Sector Salud")
+st.title("📊 Resumen de Noticias Financieras del Sector Salud")
 #st.write("Genera un análisis consolidado de todas las noticias, con riesgos y avances/fusiones en el sector salud.")
 
 if st.button("Generar Resumen"):
