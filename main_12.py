@@ -1,5 +1,3 @@
-# pruebas ---- eliminar
-
 
 # ========================================================================================================================
 # CODIGO COMPLETO: Version final que integra todos los codigos
@@ -24,6 +22,29 @@ from pydantic import BaseModel, Field
 import time
 import requests
 import plotly.express as px
+
+
+# LOGO
+# Configuración de la página
+st.set_page_config(layout="wide")
+
+# Barra superior con fondo negro solo con el logo
+logo_bar = """
+<div style="background-color: #000000; padding: 10px 20px; display: flex; align-items: center; justify-content: flex-start;">
+     <svg width="120" height="50" viewBox="0 0 420 100">
+          <circle cx="50" cy="50" r="28" stroke="#1E40FF" stroke-width="6" fill="none"/>
+          <circle cx="50" cy="50" r="18" fill="#1E40FF"/>
+          <text x="100" y="60" font-family="Arial" font-size="40" style="font-weight:bold" fill="#38D6C4">
+          CAPITAL
+          </text>
+          <text x="270" y="60" font-family="Arial" font-size="40" style="font-weight:bold" fill="#D1D5DB">
+          EYE
+          </text>
+    </svg>
+</div>
+"""
+
+st.markdown(logo_bar, unsafe_allow_html=True)
 
 
 # ========================================================================================================================
@@ -87,7 +108,7 @@ Noticias:
 _DATA_DIR = Path(__file__).resolve().parent
 panorama_df = pd.read_csv(_DATA_DIR / "panorama_df.csv")
 
-st.set_page_config(layout="wide")
+#st.set_page_config(layout="wide")
 st.title("📊 Macro Dashboard")
 
 # ==============================
@@ -326,9 +347,6 @@ def rsi(serie, n=14):
 # ==============================
 # PREDICCION CORRECTA
 # ==============================
-# ==============================
-# PREDICCION CORRECTA
-# ==============================
 # ── Constantes ──────────────────────────────────────────────────────────────
 #UMBRAL_SUBIDA       = 0.02   # +2% en 5 días
 #UMBRAL_CAIDA_FUERTE = 0.03   # 3% caída en 5 días (se usa como negativo)
@@ -499,8 +517,22 @@ if calcular:
 # ========================================================================================================================
 # INTERFAZ
 # ========================================================================================================================
-    # ── Output ───────────────────────────────────────────────────────────────
-    st.subheader("📊 Resultado del modelo")
+
+# ── Output ───────────────────────────────────────────────
+st.subheader("📊 Resultado del modelo")
+
+# ==============================
+# VARIABLES INICIALES (ANTI-ERROR)
+# ==============================
+fig_gauge = None
+prob = None
+pred = None
+yc = None
+regimen_label = None
+señal = None
+
+if fig_gauge is not None:
+
     col1, col2 = st.columns([1, 2])
 
     with col1:
@@ -515,6 +547,9 @@ if calcular:
 
         st.markdown("### Señal")
         st.markdown(f"## {señal}")
+
+else:
+    st.info("👆 Ingresa los datos y presiona **Calcular**")
 
 # ==============================
 # GRAFICOS
@@ -543,7 +578,7 @@ df_display = panorama_df3[cols].rename(columns=rename_dict)
 st.dataframe(df_display.tail(), hide_index=True)
 
 # --------------------- noticias ---------------------
-st.title("📊 Resumen Global de Noticias Financieras del Sector Salud")
+st.title("📊 Resumen de Noticias Financieras del Sector Salud")
 #st.write("Genera un análisis consolidado de todas las noticias, con riesgos y avances/fusiones en el sector salud.")
 
 if st.button("Generar Resumen"):
@@ -637,7 +672,7 @@ if st.session_state.chat_open:
 load_dotenv(override=True)
 ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY") 
 
-st.set_page_config(page_title="Razones financieras", layout="wide")
+#st.set_page_config(page_title="Razones financieras", layout="wide")
 
 # ==============================
 # FUNCIONES AUXILIARES

@@ -541,7 +541,7 @@ df_display = panorama_df3[cols].rename(columns=rename_dict)
 st.dataframe(df_display.tail(), hide_index=True)
 
 # --------------------- noticias ---------------------
-st.title("📊 Resumen Global de Noticias Financieras del Sector Salud")
+st.title("📊 Resumen de Noticias Financieras del Sector Salud")
 #st.write("Genera un análisis consolidado de todas las noticias, con riesgos y avances/fusiones en el sector salud.")
 
 if st.button("Generar Resumen"):

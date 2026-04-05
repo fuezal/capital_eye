@@ -212,12 +212,11 @@ if "df" not in st.session_state:
 if run:
     st.session_state["ticker"] = ticker_input
     with st.spinner(f"Descargando datos de {st.session_state['ticker']}..."):
-        df_loaded = load_data(st.session_state["ticker"])
-        if df_loaded.empty:
-            st.error("❌ El ticker ingresado no corresponde a una empresa que cotice en bolsa o no tiene datos disponibles. Por favor, ingresa un ticker válido.")
-            st.stop()
-        else:
-            st.session_state["df"] = df_loaded
+        st.session_state["df"] = load_data(st.session_state["ticker"])
+    
+    if st.session_state["df"].empty:
+        st.error("No se pudieron cargar datos. Revisa el ticker.")
+        st.stop()
 
 # Mostrar mensaje si no hay datos
 if st.session_state["df"].empty:
@@ -226,6 +225,7 @@ else:
     df = st.session_state["df"]
     ticker = st.session_state["ticker"]
     st.success(f"**{ticker}** — {len(df)} años cargados")
+
 
     indicadores = {
         "Rotación de cartera":    "rotacion_cartera",
