@@ -1,3 +1,8 @@
+
+# ========================================================================================================================
+# CODIGO COMPLETO: Version final que integra todos los codigos
+# ========================================================================================================================
+
 # ==============================
 # LIBRERIAS
 # ==============================
@@ -14,54 +19,48 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import List
 from pydantic import BaseModel, Field
+import time
+import requests
+import plotly.express as px
 
+
+# Librerías para noticias
+from urllib.request import Request, urlopen
+from bs4 import BeautifulSoup
+import nltk
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+# ========================================================================================================================
+# LOGO
+# ========================================================================================================================
+
+# Configuración de la página
+st.set_page_config(layout="wide")
+
+# Barra superior con fondo negro solo con el logo
+logo_bar = """
+<div style="background-color: #000000; padding: 10px 20px; display: flex; align-items: center; justify-content: flex-start;">
+    <!-- Logo SVG -->
+    <svg width="120" height="50" viewBox="0 0 420 100">
+        <circle cx="50" cy="50" r="28" stroke="#1E40FF" stroke-width="6" fill="none"/>
+        <circle cx="50" cy="50" r="18" fill="#1E40FF"/>
+        <text x="100" y="60" font-family="Arial" font-size="40" style="font-weight:bold" fill="#38D6C4">
+        CAPITAL
+        </text>
+        <text x="270" y="60" font-family="Arial" font-size="40" style="font-weight:bold" fill="#D1D5DB">
+        EYE
+        </text>
+    </svg>
+</div>
+"""
+# Mostrar barra superior
+st.markdown(logo_bar, unsafe_allow_html=True)
+
+# Contenido del dashboard
+st.write("Herramienta financiera")
 
 # ========================================================================================================================
 # NOTICIAS
 # ========================================================================================================================
-
-# --------------------- Cargar variables de entorno ---------------------
-load_dotenv(override=True)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-# --------------------- Crear cliente de OpenAI ---------------------
-client = OpenAI(api_key=OPENAI_API_KEY)
-MODEL_NAME = "gpt-4o-mini"
-
-# --------------------- Cargar dataset ---------------------
-DATA_DIR = Path(__file__).resolve().parent
-df_news = pd.read_csv(DATA_DIR / "df_news.csv")  # df_news debe tener columna "title"
-
-# --------------------- Pydantic para el resumen global ---------------------
-class GlobalInsights(BaseModel):
-    preocupaciones: List[str] = Field(default_factory=list, description="Principales riesgos o problemas detectados")
-    avances_salud: List[str] = Field(default_factory=list, description="Avances, fusiones o noticias del sector salud")
-
-# --------------------- Función para resumen global ---------------------
-def get_global_insights(titles: List[str]) -> GlobalInsights:
-    combined_text = "\n".join(titles)
-    prompt = f"""
-Analiza las siguientes noticias financieras y económicas en español. 
-Devuelve un JSON con dos campos:
-
-1. 'preocupaciones': Lista de principales riesgos o problemas detectados.
-2. 'avances_salud': Lista de avances, fusiones o noticias importantes relacionadas con el sector salud.
-
-Noticias:
-{combined_text}
-"""
-    response = client.chat.completions.parse(
-        model=MODEL_NAME,
-        messages=[
-            {
-                "role": "system",
-                "content": "Eres un experto analista financiero y de mercado. Devuelve SOLO un JSON válido con los campos 'preocupaciones' y 'avances_salud'."
-            },
-            {"role": "user", "content": prompt},
-        ],
-        response_format=GlobalInsights
-    )
-    return response.choices[0].message.parsed
 
 
 
@@ -278,8 +277,8 @@ y = panorama_df['mercado_favorable']
 
 split = int(len(X)*0.8)
 modelo = GradientBoostingClassifier(
-    n_estimators=200,
-    max_depth=4,
+    n_estimators=150,
+    max_depth=3,
     learning_rate=0.05,
     subsample=0.8,
     min_samples_leaf=20,
@@ -533,31 +532,134 @@ df_display = panorama_df3[cols].rename(columns=rename_dict)
 st.dataframe(df_display.tail(), hide_index=True)
 
 # --------------------- noticias ---------------------
-st.title("📊 Resumen Global de Noticias Financieras del Sector Salud")
-#st.write("Genera un análisis consolidado de todas las noticias, con riesgos y avances/fusiones en el sector salud.")
+# Descargar léxico si no existe
+try:
+    nltk.data.find('sentiment/vader_lexicon')
+except LookupError:
+    nltk.download('vader_lexicon')
 
-if st.button("Generar Resumen"):
-    with st.spinner("Analizando todas las noticias..."):
+# --------------------- UI ---------------------
+st.title("📊 Noticias Financieras con Finviz")
+
+user_ticker = st.text_input("Ingresa el ticker (ej: AAPL, TSLA, JNJ)", value="JNJ")
+
+# --------------------- OpenAI config ---------------------
+load_dotenv(override=True)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=OPENAI_API_KEY)
+MODEL_NAME = "gpt-4o-mini"
+
+# --------------------- Pydantic ---------------------
+class GlobalInsights(BaseModel):
+    preocupaciones: List[str] = Field(default_factory=list)
+    avances: List[str] = Field(default_factory=list)
+
+# --------------------- Función OpenAI ---------------------
+def get_global_insights(titles: List[str]) -> GlobalInsights:
+    combined_text = "\n".join(titles)
+
+    prompt = f"""
+Analiza las siguientes noticias financieras y económicas en español. 
+Devuelve un JSON con dos campos:
+
+1. 'preocupaciones': Lista de principales riesgos o problemas detectados.
+2. 'avances': Lista de avances, fusiones o noticias importantes.
+
+Noticias:
+{combined_text}
+"""
+
+    response = client.chat.completions.parse(
+        model=MODEL_NAME,
+        messages=[
+            {
+                "role": "system",
+                "content": "Eres un experto analista financiero. Devuelve SOLO JSON válido en español."
+            },
+            {"role": "user", "content": prompt},
+        ],
+        response_format=GlobalInsights
+    )
+
+    return response.choices[0].message.parsed
+
+# --------------------- BOTÓN PRINCIPAL ---------------------
+if st.button("Generar Resumen Global"):
+
+    if not user_ticker:
+        st.warning("Por favor ingresa un ticker válido.")
+        st.stop()
+
+    ticker = user_ticker.upper()
+
+    # --------------------- Scraping ---------------------
+    finviz_url = "https://finviz.com/quote.ashx?t="
+    parsed_data = []
+
+    try:
+        url = finviz_url + ticker
+        req = Request(url=url, headers={"user-agent": "app"})
+        response = urlopen(req)
+
+        html = BeautifulSoup(response, 'html.parser')
+        news_table = html.find(id="news-table")
+
+        if news_table is None:
+            st.error(f"No se encontraron noticias para {ticker}")
+            st.stop()
+
+        for row in news_table.find_all('tr'):
+            if row.a is not None:
+                title = row.a.text.strip()
+                timestamp = row.td.text.split()
+
+                if len(timestamp) == 1:
+                    date = None
+                    time_val = timestamp[0]
+                else:
+                    date = timestamp[0].lower()
+                    time_val = timestamp[1]
+
+                parsed_data.append([ticker, date, time_val, title])
+
+    except Exception as e:
+        st.error(f"Error al obtener datos: {e}")
+        st.stop()
+
+    # --------------------- DataFrame (interno, NO se muestra) ---------------------
+    df_news = pd.DataFrame(parsed_data, columns=["ticker", "date", "time", "title"])
+
+    # --------------------- Sentimiento ---------------------
+    vader = SentimentIntensityAnalyzer()
+
+    df_news['compound'] = df_news['title'].apply(lambda x: vader.polarity_scores(x)['compound'])
+
+    df_news['sentiment'] = np.where(
+        df_news['compound'] > 0, 'POS',
+        np.where(df_news['compound'] < 0, 'NEG', 'NEU')
+    )
+
+    df_news.drop(columns=['compound'], inplace=True)
+
+    # --------------------- Análisis con IA ---------------------
+    st.subheader(f"📊 Análisis para {ticker}")
+
+    with st.spinner("Analizando noticias..."):
         insights = get_global_insights(df_news["title"].tolist())
 
-        # Dos columnas para mostrar la información lado a lado
-        col1, col2 = st.columns(2)
+        st.subheader("⚠️ Principales Preocupaciones")
+        if insights.preocupaciones:
+            for p in insights.preocupaciones:
+                st.write(f"- {p}")
+        else:
+            st.write("No se detectaron preocupaciones.")
 
-        with col1:
-            st.subheader("🏥 Avances y Fusiones en Sector Salud")
-            if insights.avances_salud:
-                for a in insights.avances_salud:
-                    st.write(f"- {a}")
-            else:
-                st.write("No se detectaron avances o fusiones en el sector salud.")
-
-        with col2:
-            st.subheader("⚠️ Principales Preocupaciones")
-            if insights.preocupaciones:
-                for p in insights.preocupaciones:
-                    st.write(f"- {p}")
-            else:
-                st.write("No se detectaron preocupaciones destacables.")
+        st.subheader("🚀 Avances o Progreso")
+        if insights.avances:
+            for a in insights.avances:
+                st.write(f"- {a}")
+        else:
+            st.write("No se detectaron avances.")
 
 
 
@@ -617,3 +719,262 @@ if st.session_state.chat_open:
             response = st.write_stream(stream)
 
         st.session_state.messages.append({"role": "assistant", "content": response})
+
+
+
+
+# ===============================================================================================================
+# RAZONES FINANCIERAS
+# ===============================================================================================================
+load_dotenv(override=True)
+ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY") 
+
+st.set_page_config(page_title="Razones financieras", layout="wide")
+
+# ==============================
+# FUNCIONES AUXILIARES
+# ==============================
+def convert_columns_to_numeric(df, columns_to_exclude=[]):
+    for col in df.columns:
+        if col not in columns_to_exclude:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
+def get_annual_reports(url, name=""):
+    """Descarga annualReports de AlphaVantage (estructura distinta a /data)."""
+    try:
+        response = requests.get(url)
+        data = response.json()
+
+        if "annualReports" not in data:
+            st.warning(f"⚠️ Error en {name}: {data}")
+            return pd.DataFrame()
+
+        df = pd.DataFrame.from_dict(data["annualReports"])
+        time.sleep(12)  # evitar rate limit
+        return df
+
+    except Exception as e:
+        st.error(f"❌ Error cargando {name}: {e}")
+        return pd.DataFrame()
+
+
+def calculate_financial_growth(df, columns):
+    df["fiscalDateEnding"] = pd.to_datetime(df["fiscalDateEnding"])
+    df_sorted = df.sort_values(by="fiscalDateEnding").reset_index(drop=True)
+
+    for col in columns:
+        df_sorted[col] = pd.to_numeric(df_sorted[col], errors="coerce")
+
+    def yoy(current, previous):
+        if pd.isna(previous) or previous == 0:
+            return None
+        return ((current - previous) / abs(previous)) * 100
+
+    for col in columns:
+        df_sorted[f"previous_{col}"] = df_sorted[col].shift(1)
+        df_sorted[f"{col}_YoY_growth%"] = df_sorted.apply(
+            lambda row, c=col: yoy(row[c], row[f"previous_{c}"]), axis=1
+        )
+        df_sorted = df_sorted.drop(columns=[f"previous_{col}"])
+
+    return df_sorted[["fiscalDateEnding"] + [f"{col}_YoY_growth%" for col in columns]]
+
+
+# ==============================
+# DESCARGA Y CÁLCULO
+# ==============================
+@st.cache_data
+def load_data(ticker):
+    api_key = ALPHAVANTAGE_API_KEY
+
+    url_income = (
+        f"https://www.alphavantage.co/query"
+        f"?function=INCOME_STATEMENT&symbol={ticker}&apikey={api_key}"
+    )
+    url_balance = (
+        f"https://www.alphavantage.co/query"
+        f"?function=BALANCE_SHEET&symbol={ticker}&apikey={api_key}"
+    )
+
+    year_income_df  = get_annual_reports(url_income,  "Income Statement")
+    year_balance_df = get_annual_reports(url_balance, "Balance Sheet")
+
+    if year_income_df.empty or year_balance_df.empty:
+        return pd.DataFrame()
+
+    year_income_df  = convert_columns_to_numeric(year_income_df,  ["fiscalDateEnding"])
+    year_balance_df = convert_columns_to_numeric(year_balance_df, ["fiscalDateEnding"])
+
+    year_balance_df = year_balance_df.rename(
+        columns=lambda c: c if c == "fiscalDateEnding" else "b_" + c
+    )
+    year_income_df = year_income_df.rename(
+        columns=lambda c: c if c == "fiscalDateEnding" else "i_" + c
+    )
+
+    year_balance_df["fiscalDateEnding"] = pd.to_datetime(year_balance_df["fiscalDateEnding"])
+    year_income_df["fiscalDateEnding"]  = pd.to_datetime(year_income_df["fiscalDateEnding"])
+
+    finance_df = pd.merge(year_balance_df, year_income_df, on="fiscalDateEnding", how="left")
+    finance_df = finance_df.fillna(0)
+
+    # A) Rotación de inventario
+    finance_df["prev_inv"] = finance_df["b_inventory"].shift(-1)
+    finance_df["average_inventory"] = (finance_df["b_inventory"] + finance_df["prev_inv"]) / 2
+    finance_df = finance_df.drop(columns=["prev_inv"])
+    finance_df["rotacion_inventario"] = finance_df["i_costOfRevenue"] / finance_df["average_inventory"]
+    growth = calculate_financial_growth(finance_df.copy(), ["rotacion_inventario"])
+    finance_df = pd.merge(finance_df, growth, on="fiscalDateEnding", how="left")
+
+    # B) Rotación de cartera
+    finance_df["prev_rec"] = finance_df["b_currentNetReceivables"].shift(-1)
+    finance_df["average_receivables"] = (finance_df["b_currentNetReceivables"] + finance_df["prev_rec"]) / 2
+    finance_df = finance_df.drop(columns=["prev_rec"])
+    finance_df["rotacion_cartera"] = finance_df["i_totalRevenue"] / finance_df["average_receivables"]
+    growth = calculate_financial_growth(finance_df.copy(), ["rotacion_cartera"])
+    finance_df = pd.merge(finance_df, growth, on="fiscalDateEnding", how="left")
+
+    # C) Razón circulante
+    finance_df["razon_circulante"] = finance_df["b_totalCurrentAssets"] / finance_df["b_totalCurrentLiabilities"]
+    growth = calculate_financial_growth(finance_df.copy(), ["razon_circulante"])
+    finance_df = pd.merge(finance_df, growth, on="fiscalDateEnding", how="left")
+
+    # D) Prueba ácida
+    finance_df["prueba_acida"] = (
+        finance_df["b_totalCurrentAssets"] - finance_df["b_inventory"]
+    ) / finance_df["b_totalCurrentLiabilities"]
+    growth = calculate_financial_growth(finance_df.copy(), ["prueba_acida"])
+    finance_df = pd.merge(finance_df, growth, on="fiscalDateEnding", how="left")
+
+    # E) Razón de endeudamiento
+    finance_df["razon_endeudamiento"] = finance_df["b_totalLiabilities"] / finance_df["b_totalShareholderEquity"]
+    growth = calculate_financial_growth(finance_df.copy(), ["razon_endeudamiento"])
+    finance_df = pd.merge(finance_df, growth, on="fiscalDateEnding", how="left")
+
+    # F) Razón de solvencia
+    finance_df["razon_solvencia"] = finance_df["b_totalLiabilities"] / finance_df["b_totalAssets"]
+    growth = calculate_financial_growth(finance_df.copy(), ["razon_solvencia"])
+    finance_df = pd.merge(finance_df, growth, on="fiscalDateEnding", how="left")
+
+    # Tabla final
+    razones_df = finance_df[[
+        "fiscalDateEnding",
+        "rotacion_inventario", "rotacion_inventario_YoY_growth%",
+        "rotacion_cartera",    "rotacion_cartera_YoY_growth%",
+        "razon_circulante",    "razon_circulante_YoY_growth%",
+        "prueba_acida",        "prueba_acida_YoY_growth%",
+        "razon_endeudamiento", "razon_endeudamiento_YoY_growth%",
+        "razon_solvencia",     "razon_solvencia_YoY_growth%",
+    ]]
+    razones_df = razones_df[razones_df["fiscalDateEnding"] >= "2008-12-31"]
+    razones_df = razones_df.sort_values("fiscalDateEnding", ascending=False).reset_index(drop=True)
+    return razones_df
+
+
+# ==============================
+# FUNCIONES DE GRÁFICOS
+# ==============================
+def bar_plot1(df, column, title):
+    fig = px.bar(
+        df, x="fiscalDateEnding", y=column, title=title,
+        text=df[column].apply(lambda x: f"{x:.2f}"),
+    )
+    fig.update_traces(textposition="outside")
+    fig.update_layout(
+        template="plotly_white", title_x=0.5,
+        xaxis_title="Fecha", yaxis_title="Valor", showlegend=False,
+    )
+    return fig
+
+
+def bar_plot2(df, column, title):
+    fig = px.bar(
+        df, x="fiscalDateEnding", y=column, title=title,
+        text=df[column].apply(lambda x: f"{x:.2f}" if pd.notna(x) else ""),
+        color=(df[column].fillna(0) > 0),
+        color_discrete_map={True: "#00FF7F", False: "#FF3131"},
+    )
+    fig.update_traces(
+        textposition="outside",
+        hovertemplate="<b>%{x}</b><br>Valor: %{y:.2f}<extra></extra>",
+    )
+    fig.update_layout(
+        template="plotly_white", title_x=0.5,
+        xaxis_title="Fecha", yaxis_title="Valor (%)", showlegend=False,
+    )
+    return fig
+
+
+# ========================================================================================================================
+# INTERFAZ: RAZONES FINANCIERAS
+# ========================================================================================================================
+
+st.title("📊 Razones Financieras")
+
+# ── Parámetro de Ticker ───────────────────────────────────────────────
+ticker_input = st.text_input("Ingresa el ticker de la empresa", value="JNJ").upper()
+run = st.button("Cargar datos", type="primary")
+
+# Guardar o reutilizar ticker en session_state
+if "ticker" not in st.session_state:
+    st.session_state["ticker"] = None
+if "df" not in st.session_state:
+    st.session_state["df"] = pd.DataFrame()
+
+# Actualizar ticker y cargar datos solo si se presiona el botón
+if run:
+    st.session_state["ticker"] = ticker_input
+    with st.spinner(f"Descargando datos de {st.session_state['ticker']}..."):
+        df_loaded = load_data(st.session_state["ticker"])
+        if df_loaded.empty:
+            st.error("❌ Ticker inválido o sin datos disponibles.")
+            st.stop()
+        else:
+            st.session_state["df"] = df_loaded
+
+# Mostrar mensaje si no hay datos
+if st.session_state["df"].empty:
+    st.info("Ingresa un ticker arriba y presiona **Cargar datos** para ver los ratios financieros.")
+else:
+    df = st.session_state["df"]
+    ticker = st.session_state["ticker"]
+    st.success(f"**{ticker}** — {len(df)} años cargados")
+
+    # Diccionarios de indicadores
+    indicadores = {
+        "Rotación de cartera":    "rotacion_cartera",
+        "Rotación de inventario": "rotacion_inventario",
+        "Razón circulante":       "razon_circulante",
+        "Prueba ácida":           "prueba_acida",
+        "Razón de endeudamiento": "razon_endeudamiento",
+        "Razón de solvencia":     "razon_solvencia",
+    }
+    indicadores_growth = {
+        "Rotación de cartera (%)":    "rotacion_cartera_YoY_growth%",
+        "Rotación de inventario (%)": "rotacion_inventario_YoY_growth%",
+        "Razón circulante (%)":       "razon_circulante_YoY_growth%",
+        "Prueba ácida (%)":           "prueba_acida_YoY_growth%",
+        "Endeudamiento (%)":          "razon_endeudamiento_YoY_growth%",
+        "Solvencia (%)":              "razon_solvencia_YoY_growth%",
+    }
+
+    # Selección de indicadores
+    col_sel1, col_sel2 = st.columns(2)
+    with col_sel1:
+        label1 = st.selectbox("Indicador (Ratio)", list(indicadores.keys()), key="g1")
+    with col_sel2:
+        label2 = st.selectbox("Indicador (Crecimiento %)", list(indicadores_growth.keys()), key="g2")
+
+    # Gráficos
+    fig1 = bar_plot1(df, indicadores[label1], label1)
+    fig2 = bar_plot2(df, indicadores_growth[label2], label2)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("📈 Ratios Financieros")
+        st.plotly_chart(fig1, use_container_width=True)
+    with col2:
+        st.subheader("📊 Crecimiento YoY (%)")
+        st.plotly_chart(fig2, use_container_width=True)

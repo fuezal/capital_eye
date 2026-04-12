@@ -1,153 +1,148 @@
 # ========================================================================================================================
-# CODIGO INDIVIDUAL: Razones financieras (se debe cargar el df.csv)
+# CODIGO INDIVIDUAL: Noticias (prompt con open ai y finviz)
 # ========================================================================================================================
 
-#Librerias obligatorias
+# --------------------- Librerías ---------------------
 import os
-from pathlib import Path
+import pandas as pd
+import numpy as np
 from dotenv import load_dotenv
 import streamlit as st
 from openai import OpenAI
-import pandas as pd
-import numpy as np
+from typing import List
+from pydantic import BaseModel, Field
 
-#graficos
-import plotly.express as px
-import matplotlib.pyplot as plt
-import seaborn as sns
-import plotly.graph_objects as go
-import plotly.subplots as sp
-import plotly.figure_factory as ff
+# Librerías para noticias
+from urllib.request import Request, urlopen
+from bs4 import BeautifulSoup
+import nltk
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
-#cargar variables de entorno
+# Descargar léxico si no existe
+try:
+    nltk.data.find('sentiment/vader_lexicon')
+except LookupError:
+    nltk.download('vader_lexicon')
+
+# --------------------- UI ---------------------
+st.title("📊 Noticias Financieras con Finviz")
+
+user_ticker = st.text_input("Ingresa el ticker (ej: AAPL, TSLA, JNJ)", value="JNJ")
+
+# --------------------- OpenAI config ---------------------
 load_dotenv(override=True)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-#crear cliente de openai
 client = OpenAI(api_key=OPENAI_API_KEY)
+MODEL_NAME = "gpt-4o-mini"
 
-#crear modelo de openai
-model = "gpt-4o-mini"
+# --------------------- Pydantic ---------------------
+class GlobalInsights(BaseModel):
+    preocupaciones: List[str] = Field(default_factory=list)
+    avances: List[str] = Field(default_factory=list)
 
-_DATA_DIR = Path(__file__).resolve().parent
-razones_financieras_df = pd.read_csv(_DATA_DIR / "razones_financieras_df.csv")
+# --------------------- Función OpenAI ---------------------
+def get_global_insights(titles: List[str]) -> GlobalInsights:
+    combined_text = "\n".join(titles)
 
-# Configuración inicial
-st.set_page_config(layout="wide")
+    prompt = f"""
+Analiza las siguientes noticias financieras y económicas en español. 
+Devuelve un JSON con dos campos:
 
-# ---------------------------
-# FUNCIONES DE GRÁFICOS
-# ---------------------------
+1. 'preocupaciones': Lista de principales riesgos o problemas detectados.
+2. 'avances': Lista de avances, fusiones o noticias importantes.
 
-# Gráfico 1: Ratios
-def bar_plot1(df, column, title):
-    fig = px.bar(
-        df,
-        x='fiscalDateEnding',
-        y=column,
-        title=title,
-        text=df[column].apply(lambda x: f"{x:.2f}")
+Noticias:
+{combined_text}
+"""
+
+    response = client.chat.completions.parse(
+        model=MODEL_NAME,
+        messages=[
+            {
+                "role": "system",
+                "content": "Eres un experto analista financiero. Devuelve SOLO JSON válido en español."
+            },
+            {"role": "user", "content": prompt},
+        ],
+        response_format=GlobalInsights
     )
 
-    fig.update_traces(textposition='outside')
+    return response.choices[0].message.parsed
 
-    fig.update_layout(
-        template='plotly_white',
-        title_x=0.5,
-        xaxis_title='Fecha',
-        yaxis_title='Valor',
-        showlegend=False
+# --------------------- BOTÓN PRINCIPAL ---------------------
+if st.button("Generar Resumen Global"):
+
+    if not user_ticker:
+        st.warning("Por favor ingresa un ticker válido.")
+        st.stop()
+
+    ticker = user_ticker.upper()
+
+    # --------------------- Scraping ---------------------
+    finviz_url = "https://finviz.com/quote.ashx?t="
+    parsed_data = []
+
+    try:
+        url = finviz_url + ticker
+        req = Request(url=url, headers={"user-agent": "app"})
+        response = urlopen(req)
+
+        html = BeautifulSoup(response, 'html.parser')
+        news_table = html.find(id="news-table")
+
+        if news_table is None:
+            st.error(f"No se encontraron noticias para {ticker}")
+            st.stop()
+
+        for row in news_table.find_all('tr'):
+            if row.a is not None:
+                title = row.a.text.strip()
+                timestamp = row.td.text.split()
+
+                if len(timestamp) == 1:
+                    date = None
+                    time_val = timestamp[0]
+                else:
+                    date = timestamp[0].lower()
+                    time_val = timestamp[1]
+
+                parsed_data.append([ticker, date, time_val, title])
+
+    except Exception as e:
+        st.error(f"Error al obtener datos: {e}")
+        st.stop()
+
+    # --------------------- DataFrame (interno, NO se muestra) ---------------------
+    df_news = pd.DataFrame(parsed_data, columns=["ticker", "date", "time", "title"])
+
+    # --------------------- Sentimiento ---------------------
+    vader = SentimentIntensityAnalyzer()
+
+    df_news['compound'] = df_news['title'].apply(lambda x: vader.polarity_scores(x)['compound'])
+
+    df_news['sentiment'] = np.where(
+        df_news['compound'] > 0, 'POS',
+        np.where(df_news['compound'] < 0, 'NEG', 'NEU')
     )
-    
-    return fig
 
+    df_news.drop(columns=['compound'], inplace=True)
 
-# Gráfico 2: Crecimiento (%)
-def bar_plot2(df, column, title):
-    fig = px.bar(
-        df,
-        x='fiscalDateEnding',
-        y=column,
-        title=title,
-        text=df[column].apply(lambda x: f"{x:.2f}"),
-        color=(df[column].fillna(0) > 0),
-        color_discrete_map={
-            True: '#00FF7F',
-            False: '#FF3131'
-        }
-    )
+    # --------------------- Análisis con IA ---------------------
+    st.subheader(f"📊 Análisis para {ticker}")
 
-    fig.update_traces(
-        textposition='outside',
-        hovertemplate='<b>%{x}</b><br>Valor: %{y:.2f}<extra></extra>'
-    )
+    with st.spinner("Analizando noticias..."):
+        insights = get_global_insights(df_news["title"].tolist())
 
-    fig.update_layout(
-        template='plotly_white',
-        title_x=0.5,
-        xaxis_title='Fecha',
-        yaxis_title='Valor',
-        showlegend=False
-    )
+        st.subheader("⚠️ Principales Preocupaciones")
+        if insights.preocupaciones:
+            for p in insights.preocupaciones:
+                st.write(f"- {p}")
+        else:
+            st.write("No se detectaron preocupaciones.")
 
-    return fig
-
-
-# ---------------------------
-# UI
-# ---------------------------
-
-st.title("📊 Dashboard de Ratios Financieros J&J (Johnson & Johnson)")
-
-# Mapeo: nombre bonito → nombre real
-indicadores = {
-    "Rotación de cartera": "rotacion_cartera",
-    "Rotación de inventario": "rotacion_inventario",
-    "Razón circulante": "razon_circulante",
-    "Prueba ácida": "prueba_acida",
-    "Razón de endeudamiento": "razon_endeudamiento",
-    "Razón de solvencia": "razon_solvencia"
-}
-
-indicadores2 = {
-    "Rotación de cartera (%)": "rotacion_cartera_YoY_growth%",
-    "Rotación de inventario (%)": "rotacion_inventario_YoY_growth%",
-    "Razón circulante (%)": "razon_circulante_YoY_growth%",
-    "Prueba ácida (%)": "prueba_acida_YoY_growth%",
-    "Endeudamiento (%)": "razon_endeudamiento_YoY_growth%",
-    "Solvencia (%)": "razon_solvencia_YoY_growth%"
-}
-
-# Selectores
-col_selector1, col_selector2 = st.columns(2)
-
-with col_selector1:
-    label1 = st.selectbox(
-        "Indicador (Ratios)",
-        list(indicadores.keys()),
-        key="grafico1"
-    )
-    col = indicadores[label1]  # 👈 aquí conviertes
-
-with col_selector2:
-    label2 = st.selectbox(
-        "Indicador (Crecimiento %)",
-        list(indicadores2.keys()),
-        key="grafico2"
-    )
-    col2 = indicadores2[label2]  # 👈 aquí conviertes
-
-# Crear gráficos
-fig1 = bar_plot1(razones_financieras_df, col, f"{label1}")
-fig2 = bar_plot2(razones_financieras_df, col2, f"{label2}")
-
-# Layout dashboard
-col1, col2_layout = st.columns(2)
-
-with col1:
-    st.subheader("📈 Ratios Financieros")
-    st.plotly_chart(fig1, use_container_width=True)
-
-with col2_layout:
-    st.subheader("📊 Crecimiento (%)")
-    st.plotly_chart(fig2, use_container_width=True)
+        st.subheader("🚀 Avances o Progreso")
+        if insights.avances:
+            for a in insights.avances:
+                st.write(f"- {a}")
+        else:
+            st.write("No se detectaron avances.")

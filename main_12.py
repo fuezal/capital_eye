@@ -314,8 +314,8 @@ y = panorama_df['mercado_favorable']
 
 split = int(len(X)*0.8)
 modelo = GradientBoostingClassifier(
-    n_estimators=200,
-    max_depth=4,
+    n_estimators=150,
+    max_depth=3,
     learning_rate=0.05,
     subsample=0.8,
     min_samples_leaf=20,
