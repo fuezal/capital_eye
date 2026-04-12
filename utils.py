@@ -217,9 +217,69 @@ if seccion == "🌎 Panorama del mercado":
         height=400
     )
 
-    #fig4 = make_subplots()
-    #fig4.add_trace(go.Scatter(x=panorama_df["date"], y=panorama_df["bono10_value"], name="10Y"))
-    #fig4.add_trace(go.Scatter(x=panorama_df["date"], y=panorama_df["bono2_value"], name="2Y"))
+
+
+    # ==============================
+    # FIG 5: VOLATILIDAD + DRAWDOWN
+    # ==============================
+    fig5 = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        subplot_titles=(
+            'Volatilidad anualizada del Oro (20d)',
+            'Drawdown desde máximo histórico'
+        ),
+        row_heights=[0.55, 0.45]
+    )
+
+    # Volatilidad oro
+    fig5.add_trace(go.Scatter(
+        x=panorama_df['date'],
+        y=panorama_df['gold_vol20_ann'],
+        name='Vol Oro',
+        line=dict(color='#c9a227'),
+        fill='tozeroy',
+        fillcolor='rgba(201,162,39,0.2)'
+    ), row=1, col=1)
+
+    # Drawdowns
+    colores_dd = {
+        'gold_drawdown':  '#c9a227',
+        'wti_drawdown':   '#003366',
+        'brent_drawdown': '#66bb6a',
+    }
+
+    for col, color in colores_dd.items():
+        if col in panorama_df.columns:
+            fig5.add_trace(go.Scatter(
+                x=panorama_df['date'],
+                y=panorama_df[col] * 100,
+                name=col.replace('_drawdown', '').upper(),
+                line=dict(color=color, width=1)
+            ), row=2, col=1)
+
+    # Sombreado crisis
+    for start, end, _ in crisis:
+        for row in [1, 2]:
+            fig5.add_vrect(
+                x0=start, x1=end,
+                fillcolor='rgba(255,80,80,0.08)',
+                line_width=0,
+                layer='below',
+                row=row, col=1
+            )
+
+    fig5.update_yaxes(title_text='Volatilidad', row=1, col=1)
+    fig5.update_yaxes(title_text='Drawdown (%)', row=2, col=1)
+
+    fig5.update_layout(
+        title='Volatilidad y drawdowns',
+        height=600,
+        template='plotly_white'
+    )
+
+
+
 
     # ==============================
     # TARGET Y REGIMENES
@@ -527,6 +587,7 @@ if seccion == "🌎 Panorama del mercado":
     col1,col2 = st.columns(2)
     col1.plotly_chart(fig3, use_container_width=True)
     col2.plotly_chart(fig4, use_container_width=True)
+    st.plotly_chart(fig5, use_container_width=True)
 
     panorama_df3 = pd.read_csv(_DATA_DIR / "panorama_df.csv")
 

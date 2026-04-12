@@ -65,7 +65,7 @@ logo_bar = """
 st.markdown(logo_bar, unsafe_allow_html=True)
 
 # Contenido del dashboard
-st.write("Herramienta financiera")
+#st.write("Herramienta financiera")
 
 # ==============================
 # NAVEGACIÓN
@@ -88,33 +88,331 @@ seccion = st.sidebar.selectbox(
 # ========================================================================================================================
 if seccion == "🌎 Panorama del mercado":
 
-    # ===============================
-    # MODELO
-    # ===============================
+    # ==============================
+    # FUNCIONES
+    # ==============================
+    def rsi(serie, n=14):
+        delta = serie.diff()
+        gain = delta.clip(lower=0).rolling(n).mean()
+        loss = (-delta.clip(upper=0)).rolling(n).mean()
+        rs = gain / loss.replace(0, np.nan)
+        return 100 - (100 / (1 + rs))
+
+
+    def build_features(df):
+        # Retornos
+        df['wti_ret_5d'] = df['crudeoil_wti_value'].pct_change(5)
+        df['wti_ret_21d'] = df['crudeoil_wti_value'].pct_change(21)
+        df['gold_ret_21d'] = df['gold_price'].pct_change(21)
+        df['gold_ret_5d'] = df['gold_price'].pct_change(5)
+        df['bono10_ret_5d'] = df['bono10_value'].pct_change(5)
+        df['wti_ret_5d_now'] = df['crudeoil_wti_value'].pct_change(5)
+
+        # Spreads
+        df['wti_brent_spread'] = df['crudeoil_wti_value'] - df['crudeoil_brent_value']
+        df['yield_curve'] = df['bono10_value'] - df['bono2_value']
+        df['yield_curve_neg'] = (df['yield_curve'] < 0).astype(int)
+        df['gold_oil_ratio'] = df['gold_price'] / df['crudeoil_wti_value']
+
+        # RSI
+        df['wti_rsi14'] = rsi(df['crudeoil_wti_value'])
+        df['bono10_rsi14'] = rsi(df['bono10_value'])
+
+        # Percentiles
+        df['wti_52w_pct'] = df['crudeoil_wti_value'] / df['crudeoil_wti_value'].rolling(252).max()
+        df['gold_52w_pct'] = df['gold_price'] / df['gold_price'].rolling(252).max()
+
+        # Volatilidad
+        df['wti_vol20_ann'] = np.log(df['crudeoil_wti_value'] / df['crudeoil_wti_value'].shift(1)).rolling(20).std() * np.sqrt(252)
+        df['gold_vol20_ann'] = np.log(df['gold_price'] / df['gold_price'].shift(1)).rolling(20).std() * np.sqrt(252)
+        df['bono10_vol20_ann'] = np.log(df['bono10_value'] / df['bono10_value'].shift(1)).rolling(20).std() * np.sqrt(252)
+        df['brent_vol20_ann'] = np.log(df['crudeoil_brent_value'] / df['crudeoil_brent_value'].shift(1)).rolling(20).std() * np.sqrt(252)
+        df['bono2_vol20_ann'] = np.log(df['bono2_value'] / df['bono2_value'].shift(1)).rolling(20).std() * np.sqrt(252)
+
+        # Drawdowns
+        df['wti_drawdown'] = (df['crudeoil_wti_value'] - df['crudeoil_wti_value'].expanding().max()) / df['crudeoil_wti_value'].expanding().max()
+        df['gold_drawdown'] = (df['gold_price'] - df['gold_price'].expanding().max()) / df['gold_price'].expanding().max()
+        df['bono2_drawdown'] = (df['bono2_value'] - df['bono2_value'].expanding().max()) / df['bono2_value'].expanding().max()
+
+        return df
+
+
+    def asignar_regimen(row, UMBRAL_SUBIDA=0.01, UMBRAL_CAIDA=0.05):
+        wti = row['wti_ret_5d_now']
+        b10 = row['bono10_ret_5d']
+        gold = row['gold_ret_5d']
+
+        if wti < -UMBRAL_CAIDA:
+            return 0
+        elif (wti > UMBRAL_SUBIDA) and (b10 > UMBRAL_SUBIDA):
+            return 2
+        elif (gold > UMBRAL_SUBIDA) and (wti > UMBRAL_SUBIDA):
+            return 3
+        else:
+            return 1
+
+
+    # ==============================
+    # CARGA DATA
+    # ==============================
     _DATA_DIR = Path(__file__).resolve().parent
     panorama_df = pd.read_csv(_DATA_DIR / "panorama_df.csv")
-
-    st.set_page_config(layout="wide")
-    st.title("📊 Macro Dashboard")
-
-    # ==============================
-    # LIMPIEZA
-    # ==============================
     panorama_df['date'] = pd.to_datetime(panorama_df['date'])
     panorama_df = panorama_df.sort_values('date').reset_index(drop=True)
-    panorama_df = panorama_df.drop(columns=['Unnamed: 0'])
+    panorama_df = panorama_df.drop(columns=['Unnamed: 0'], errors='ignore')
+
+    panorama_df = build_features(panorama_df)
+
+    # TARGET
+    HORIZONTE = 5
+    panorama_df['wti_ret_forward5'] = panorama_df['crudeoil_wti_value'].shift(-HORIZONTE) / panorama_df['crudeoil_wti_value'] - 1
+
+    panorama_df['regimen_actual'] = panorama_df.apply(asignar_regimen, axis=1)
+
+    panorama_df['mercado_favorable'] = (
+        (panorama_df['wti_ret_forward5'] > 0) &
+        (panorama_df['yield_curve'] > 0) &
+        (panorama_df['regimen_actual'] != 0) &
+        (panorama_df['regimen_actual'] != 3)
+    ).astype(int)
 
     # ==============================
-    # KPIs
+    # MODELO
     # ==============================
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("WTI", round(panorama_df["crudeoil_wti_value"].iloc[-1], 2))
-    c2.metric("Brent", round(panorama_df["crudeoil_brent_value"].iloc[-1], 2))
-    c3.metric("Bono 10Y", round(panorama_df["bono10_value"].iloc[-1], 2))
-    c4.metric("Bono 2Y", round(panorama_df["bono2_value"].iloc[-1], 2))
-    c5.metric("Oro", round(panorama_df["gold_price"].iloc[-1], 2))
+    FEATURES = [
+        "bono10_rsi14","gold_ret_21d","wti_ret_5d","wti_ret_21d",
+        "gold_52w_pct","wti_rsi14","wti_vol20_ann","wti_52w_pct",
+        "wti_drawdown","gold_vol20_ann","gold_drawdown",
+        "wti_brent_spread","bono10_vol20_ann","gold_oil_ratio",
+        "yield_curve_neg","bono2_drawdown","gold_price"
+    ]
+
+    panorama_df = panorama_df.dropna(subset=FEATURES + ['mercado_favorable'])
+
+    X = panorama_df[FEATURES]
+    y = panorama_df['mercado_favorable']
+
+    split = int(len(X) * 0.8)
+
+    modelo = GradientBoostingClassifier(
+        n_estimators=150,
+        max_depth=3,
+        learning_rate=0.05,
+        subsample=0.8,
+        min_samples_leaf=20,
+        random_state=42
+    )
+
+    modelo.fit(X.iloc[:split], y.iloc[:split])
+
+    # ==============================
+    # UI
+    # ==============================
+    st.title("📊 Macro Dashboard")
+
+    #c1, c2, c3, c4, c5 = st.columns(5)
+    #c1.metric("WTI", round(df["crudeoil_wti_value"].iloc[-1], 2))
+    #c2.metric("Brent", round(df["crudeoil_brent_value"].iloc[-1], 2))
+    #c3.metric("Bono 10Y", round(df["bono10_value"].iloc[-1], 2))
+    #c4.metric("Bono 2Y", round(df["bono2_value"].iloc[-1], 2))
+    #c5.metric("Oro", round(df["gold_price"].iloc[-1], 2))
 
     st.markdown("---")
+
+    # ==============================
+    # INPUT
+    # ==============================
+    st.subheader("🔮 Predicción")
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+
+    wti = c1.number_input("WTI", value=float(panorama_df["crudeoil_wti_value"].iloc[-1]))
+    brent = c2.number_input("Brent", value=float(panorama_df["crudeoil_brent_value"].iloc[-1]))
+    bono2 = c3.number_input("Bono 2Y", value=float(panorama_df["bono2_value"].iloc[-1]))
+    bono10 = c4.number_input("Bono 10Y", value=float(panorama_df["bono10_value"].iloc[-1]))
+    gold = c5.number_input("Gold", value=float(panorama_df["gold_price"].iloc[-1]))
+
+    if st.button("Calcular"):
+
+        df_pred = panorama_df.copy()
+
+        df_pred.loc[df_pred.index[-1], 'crudeoil_wti_value'] = wti
+        df_pred.loc[df_pred.index[-1], 'crudeoil_brent_value'] = brent
+        df_pred.loc[df_pred.index[-1], 'bono2_value'] = bono2
+        df_pred.loc[df_pred.index[-1], 'bono10_value'] = bono10
+        df_pred.loc[df_pred.index[-1], 'gold_price'] = gold
+
+        df_pred = build_features(df_pred)
+        df_pred['regimen_actual'] = df_pred.apply(asignar_regimen, axis=1)
+
+        fila = df_pred[FEATURES].iloc[[-1]]
+
+        prob = modelo.predict_proba(fila)[0, 1]
+        pred = modelo.predict(fila)[0]
+
+        # ==============================
+        # KPIs
+        # ==============================
+        score = prob * 100
+        yc = df_pred['yield_curve'].iloc[-1]
+
+        # Régimen
+        regimen_map = {
+            0: "⚠️ Riesgo",
+            1: "😐 Neutro",
+            2: "📈 Crecimiento",
+            3: "😨 Miedo"
+        }
+        regimen = regimen_map[int(df_pred['regimen_actual'].iloc[-1])]
+
+        # Señal
+        if prob >= 0.65:
+            señal = "🟢 FAVORABLE"
+        elif prob >= 0.50:
+            señal = "🟡 LEVE FAVORABLE"
+        elif prob >= 0.35:
+            señal = "🟠 LEVE DESFAVORABLE"
+        else:
+            señal = "🔴 DESFAVORABLE"
+
+        # ==============================
+        # GAUGE CON COLORES
+        # ==============================
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=score,
+            number={'suffix': "%"},
+            title={'text': "Market Score"},
+            gauge={
+                'axis': {'range': [0, 100]},
+                'bar': {'color': "black"},
+                'steps': [
+                    {'range': [0, 35], 'color': "#d73027"},   # rojo
+                    {'range': [35, 50], 'color': "#fc8d59"},  # naranja
+                    {'range': [50, 65], 'color': "#fee08b"},  # amarillo
+                    {'range': [65, 100], 'color': "#1a9850"}  # verde
+                ],
+                'threshold': {
+                    'line': {'color': "black", 'width': 4},
+                    'value': score
+                }
+            }
+        ))
+
+        fig.update_layout(height=300)
+
+
+        # ==============================
+        # VOLATILIDADES ACTUALES
+        # ==============================
+        vol_wti_kpi  = df_pred['wti_vol20_ann'].iloc[-1]
+        vol_brent_kpi  = df_pred['brent_vol20_ann'].iloc[-1]
+        vol_bono2_kpi  = df_pred['bono2_vol20_ann'].iloc[-1]
+        vol_bono10_kpi = df_pred['bono10_vol20_ann'].iloc[-1]
+        vol_gold_kpi   = df_pred['gold_vol20_ann'].iloc[-1]
+
+
+        # ==============================
+        # OUTPUT UI
+        # ==============================
+
+        st.subheader("📊 Resultado del modelo")
+
+        col1, col2 = st.columns([1, 1.1])
+
+        # ==============================
+        # GAUGE
+        # ==============================
+        with col1:
+            st.plotly_chart(fig, use_container_width=True)
+
+        # ==============================
+        # TABLA KPI PRO
+        # ==============================
+        with col2:
+
+            # Separación lógica
+            df_kpis = pd.DataFrame({
+                "Indicador": [
+                    "🎯 Probabilidad",
+                    "📌 Predicción",
+                    "📈 Yield Curve",
+                    "🌍 Régimen",
+                    "🚦 Señal",
+                    "⚡ Vol WTI",
+                    "⚡ Vol Brent",
+                    "⚡ Vol 2Y",
+                    "⚡ Vol 10Y",
+                    "⚡ Vol Oro"
+                ],
+                "Valor": [
+                    f"{prob:.1%}",
+                    "Favorable" if pred == 1 else "Desfavorable",
+                    f"{yc:.2f}",
+                    regimen,
+                    señal,
+                    f"{vol_wti_kpi:.1%}",
+                    f"{vol_brent_kpi:.1%}",
+                    f"{vol_bono2_kpi:.1%}",
+                    f"{vol_bono10_kpi:.1%}",
+                    f"{vol_gold_kpi:.1%}"
+                ]
+            })
+
+            # ==============================
+            # COLOR PROFESIONAL
+            # ==============================
+            def color_fila(row):
+                val = str(row["Valor"])
+
+                if "🟢" in val:
+                    return ["background-color: #0f5132; color: #d1e7dd"] * 2
+                elif "🟡" in val:
+                    return ["background-color: #664d03; color: #fff3cd"] * 2
+                elif "🟠" in val:
+                    return ["background-color: #7f2704; color: #ffddb5"] * 2
+                elif "🔴" in val:
+                    return ["background-color: #58151c; color: #f8d7da"] * 2
+                elif row["Indicador"] == "":
+                    return ["background-color: black; color: black"] * 2
+                else:
+                    return ["background-color: #111111; color: white"] * 2
+
+            styled_table = (
+                df_kpis.style
+                .apply(color_fila, axis=1)
+                .set_properties(**{
+                    "font-size": "15px",
+                    "text-align": "center",
+                    "border": "1px solid #222"
+                })
+                .set_table_styles([
+                    {
+                        "selector": "th",
+                        "props": [
+                            ("background-color", "#000000"),
+                            ("color", "white"),
+                            ("font-size", "16px"),
+                            ("text-align", "center"),
+                            ("border", "1px solid #333")
+                        ]
+                    },
+                    {
+                        "selector": "td",
+                        "props": [
+                            ("padding", "8px"),
+                            ("border", "1px solid #222")
+                        ]
+                    }
+                ])
+            )
+
+            st.markdown("### 📊 Market Snapshot")
+            st.dataframe(styled_table, use_container_width=True, height=420)
+
+
+
+    #graficos
 
     # ==============================
     # FIG 3: YIELD CURVE
@@ -217,313 +515,6 @@ if seccion == "🌎 Panorama del mercado":
         height=400
     )
 
-    #fig4 = make_subplots()
-    #fig4.add_trace(go.Scatter(x=panorama_df["date"], y=panorama_df["bono10_value"], name="10Y"))
-    #fig4.add_trace(go.Scatter(x=panorama_df["date"], y=panorama_df["bono2_value"], name="2Y"))
-
-    # ==============================
-    # TARGET Y REGIMENES
-    # ==============================
-    HORIZONTE = 5
-
-    panorama_df['wti_ret_forward5'] = (
-        panorama_df['crudeoil_wti_value'].shift(-HORIZONTE) /
-        panorama_df['crudeoil_wti_value'] - 1
-    )
-
-    panorama_df['gold_ret_5d']   = panorama_df['gold_price'].pct_change(5)
-    panorama_df['bono10_ret_5d'] = panorama_df['bono10_value'].pct_change(5)
-    panorama_df['wti_ret_5d_now'] = panorama_df['crudeoil_wti_value'].pct_change(5)
-
-    UMBRAL_CAIDA_FUERTE = -0.05
-    UMBRAL_SUBIDA = 0.01
-
-    panorama_df['regimen_crecimiento'] = (
-        (panorama_df['wti_ret_5d_now'] > UMBRAL_SUBIDA) &
-        (panorama_df['bono10_ret_5d']  > UMBRAL_SUBIDA)
-    ).astype(int)
-
-    panorama_df['regimen_miedo'] = (
-        (panorama_df['gold_ret_5d'] > UMBRAL_SUBIDA) &
-        (panorama_df['wti_ret_5d_now'] > UMBRAL_SUBIDA)
-    ).astype(int)
-
-    panorama_df['regimen_riesgo'] = (
-        panorama_df['wti_ret_5d_now'] < UMBRAL_CAIDA_FUERTE
-    ).astype(int)
-
-    panorama_df['mercado_favorable'] = (
-        (panorama_df['wti_ret_forward5'] > 0) &
-        (panorama_df['yield_curve'] > 0) &
-        (panorama_df['regimen_riesgo'] == 0) &
-        (panorama_df['regimen_miedo'] == 0)
-    ).astype(int)
-
-
-    panorama_df['regimen_estanflacion'] = (
-        (panorama_df['wti_ret_5d_now'] > UMBRAL_SUBIDA) &
-        (panorama_df['bono10_ret_5d']  < -UMBRAL_SUBIDA)
-    ).astype(int)
-
-    def asignar_regimen_multiclase(row):
-        if row['regimen_riesgo'] == 1:
-            return 0
-        elif row['regimen_crecimiento'] == 1 and row['regimen_miedo'] == 0:
-            return 2
-        elif row['regimen_miedo'] == 1:
-            return 3
-        else:
-            return 1
-
-    panorama_df['regimen_actual'] = panorama_df.apply(asignar_regimen_multiclase, axis=1)
-
-    panorama_df = panorama_df.dropna()
-
-    # ==============================
-    # MODELO
-    # ==============================
-    FEATURES = [
-        "bono10_rsi14","gold_ret_21d","wti_ret_5d","wti_ret_21d",
-        "gold_52w_pct","wti_rsi14","wti_vol20_ann","wti_52w_pct",
-        "wti_drawdown","gold_vol20_ann","gold_drawdown",
-        "wti_brent_spread","bono10_vol20_ann","gold_oil_ratio",
-        "yield_curve_neg","regimen_miedo","bono2_drawdown","gold_price"
-    ]
-
-    X = panorama_df[FEATURES]
-    y = panorama_df['mercado_favorable']
-
-    split = int(len(X)*0.8)
-    modelo = GradientBoostingClassifier(
-        n_estimators=150,
-        max_depth=3,
-        learning_rate=0.05,
-        subsample=0.8,
-        min_samples_leaf=20,
-        random_state=42
-    )
-
-    modelo.fit(X.iloc[:split], y.iloc[:split])
-
-    # ==============================
-    # INPUT USUARIO
-    # ==============================
-    st.markdown("## 🔮 Predicción")
-
-    c1,c2,c3,c4,c5 = st.columns(5)
-
-    wti = c1.text_input("WTI")
-    brent = c2.text_input("Brent")
-    bono2 = c3.text_input("Bono 2Y")
-    bono10 = c4.text_input("Bono 10Y")
-    gold = c5.text_input("Gold")
-
-    calcular = st.button("Calcular")
-
-    # ==============================
-    # FUNCIONES
-    # ==============================
-    def rsi(serie, n=14):
-        delta = serie.diff()
-        gain = delta.clip(lower=0).rolling(n).mean()
-        loss = (-delta.clip(upper=0)).rolling(n).mean()
-        rs = gain / loss.replace(0,np.nan)
-        return 100 - (100/(1+rs))
-
-
-    # ==============================
-    # PREDICCION CORRECTA
-    # ==============================
-    # ── Constantes ──────────────────────────────────────────────────────────────
-    #UMBRAL_SUBIDA       = 0.02   # +2% en 5 días
-    #UMBRAL_CAIDA_FUERTE = 0.03   # 3% caída en 5 días (se usa como negativo)
-
-    # ── Función de régimen multiclase ───────────────────────────────────────────
-    def asignar_regimen_multiclase(row):
-        """
-        0 = Riesgo       → WTI cae fuerte
-        1 = Neutro       → ninguna condición dominante
-        2 = Crecimiento  → WTI sube + bono10 sube
-        3 = Miedo        → Gold sube + WTI sube
-        """
-        wti   = row['wti_ret_5d_now']
-        b10   = row['bono10_ret_5d']
-        gold  = row['gold_ret_5d']
-
-        if wti < -UMBRAL_CAIDA_FUERTE:
-            return 0  # Riesgo — prioridad máxima
-        elif (wti > UMBRAL_SUBIDA) and (b10 > UMBRAL_SUBIDA):
-            return 2  # Crecimiento
-        elif (gold > UMBRAL_SUBIDA) and (wti > UMBRAL_SUBIDA):
-            return 3  # Miedo
-        else:
-            return 1  # Neutro
-
-    # ── Bloque de predicción completo ───────────────────────────────────────────
-    if calcular:
-
-        if not all([wti, brent, bono2, bono10, gold]):
-            st.error("⚠️ Ingresa los 5 valores")
-            st.stop()
-
-        try:
-            wti, brent, bono2, bono10, gold = map(float, [wti, brent, bono2, bono10, gold])
-        except:
-            st.error("⚠️ Todos deben ser numéricos")
-            st.stop()
-
-        # ── Cargar CSV original completo ─────────────────────────────────────────
-        df = pd.read_csv(_DATA_DIR / "panorama_df.csv")
-        df['date'] = pd.to_datetime(df['date'])
-        df = df.sort_values('date').reset_index(drop=True)
-        df = df.drop(columns=['Unnamed: 0'], errors='ignore')
-
-        # ── Verificar historia suficiente ────────────────────────────────────────
-        cols_base = ['crudeoil_wti_value', 'crudeoil_brent_value',
-                    'bono2_value', 'bono10_value', 'gold_price']
-        filas_validas = df[cols_base].dropna().shape[0]
-        if filas_validas < 260:  # necesitamos 252 para rolling 52w
-            st.error(f"⚠️ Solo hay {filas_validas} filas con datos. Se necesitan al menos 260.")
-            st.stop()
-
-        # ── Inyectar valores del usuario en la última fila ───────────────────────
-        df.loc[df.index[-1], 'crudeoil_wti_value']  = wti
-        df.loc[df.index[-1], 'crudeoil_brent_value'] = brent
-        df.loc[df.index[-1], 'bono2_value']           = bono2
-        df.loc[df.index[-1], 'bono10_value']          = bono10
-        df.loc[df.index[-1], 'gold_price']            = gold
-
-        # ── Recalcular todos los features ────────────────────────────────────────
-
-        # Retornos
-        df['wti_ret_5d']      = df['crudeoil_wti_value'].pct_change(5)
-        df['wti_ret_21d']     = df['crudeoil_wti_value'].pct_change(21)
-        df['gold_ret_21d']    = df['gold_price'].pct_change(21)
-        df['gold_ret_5d']     = df['gold_price'].pct_change(5)
-        df['bono10_ret_5d']   = df['bono10_value'].pct_change(5)
-        df['wti_ret_5d_now']  = df['crudeoil_wti_value'].pct_change(5)
-
-        # Spreads y ratios
-        df['wti_brent_spread'] = df['crudeoil_wti_value'] - df['crudeoil_brent_value']
-        df['yield_curve']      = df['bono10_value'] - df['bono2_value']
-        df['yield_curve_neg']  = (df['yield_curve'] < 0).astype(int)
-        df['gold_oil_ratio']   = df['gold_price'] / df['crudeoil_wti_value']
-
-        # RSI
-        df['wti_rsi14']    = rsi(df['crudeoil_wti_value'])
-        df['bono10_rsi14'] = rsi(df['bono10_value'])
-
-        # 52-week percentile
-        df['wti_52w_pct']  = df['crudeoil_wti_value'] / df['crudeoil_wti_value'].rolling(252).max()
-        df['gold_52w_pct'] = df['gold_price'] / df['gold_price'].rolling(252).max()
-
-        # Volatilidad anualizada
-        df['wti_vol20_ann']    = np.log(df['crudeoil_wti_value'] / df['crudeoil_wti_value'].shift(1)).rolling(20).std() * np.sqrt(252)
-        df['gold_vol20_ann']   = np.log(df['gold_price']         / df['gold_price'].shift(1)        ).rolling(20).std() * np.sqrt(252)
-        df['bono10_vol20_ann'] = np.log(df['bono10_value']       / df['bono10_value'].shift(1)      ).rolling(20).std() * np.sqrt(252)
-
-        # Drawdowns
-        df['wti_drawdown']   = (df['crudeoil_wti_value'] - df['crudeoil_wti_value'].expanding().max()) / df['crudeoil_wti_value'].expanding().max()
-        df['gold_drawdown']  = (df['gold_price']         - df['gold_price'].expanding().max()         ) / df['gold_price'].expanding().max()
-        df['bono2_drawdown'] = (df['bono2_value']         - df['bono2_value'].expanding().max()        ) / df['bono2_value'].expanding().max()
-
-        # ── Regímenes binarios ───────────────────────────────────────────────────
-        df['regimen_crecimiento'] = (
-            (df['wti_ret_5d_now'] > UMBRAL_SUBIDA) &
-            (df['bono10_ret_5d']  > UMBRAL_SUBIDA)
-        ).astype(int)
-
-        df['regimen_miedo'] = (
-            (df['gold_ret_5d']    > UMBRAL_SUBIDA) &
-            (df['wti_ret_5d_now'] > UMBRAL_SUBIDA)
-        ).astype(int)
-
-        df['regimen_riesgo'] = (
-            df['wti_ret_5d_now'] < -UMBRAL_CAIDA_FUERTE  # ← negativo, corrección clave
-        ).astype(int)
-
-        df['regimen_estanflacion'] = (
-            (df['wti_ret_5d_now'] > UMBRAL_SUBIDA) &
-            (df['bono10_ret_5d']  < -UMBRAL_SUBIDA)
-        ).astype(int)
-
-        # ── Régimen multiclase ───────────────────────────────────────────────────
-        df['regimen_actual'] = df.apply(asignar_regimen_multiclase, axis=1)
-
-        # ── Extraer fila de predicción ───────────────────────────────────────────
-        fila = df[FEATURES].iloc[[-1]]
-
-        if fila.isna().sum().sum() > 0:
-            nan_cols = fila.columns[fila.isna().any()].tolist()
-            st.error(f"⚠️ Columnas con NaN: {nan_cols}")
-            st.stop()
-
-        prob = modelo.predict_proba(fila)[0, 1]
-        pred = modelo.predict(fila)[0]
-
-        # ── Señal ────────────────────────────────────────────────────────────────
-        if prob >= 0.65:
-            señal = '🟢 FAVORABLE'
-        elif prob >= 0.50:
-            señal = '🟡 LEVE FAVORABLE'
-        elif prob >= 0.35:
-            señal = '🟠 LEVE DESFAVORABLE'
-        else:
-            señal = '🔴 DESFAVORABLE'
-
-        yc            = df['yield_curve'].iloc[-1]
-        regimen_map   = {0: "⚠️ Riesgo", 1: "😐 Neutro", 2: "📈 Crecimiento", 3: "😨 Miedo"}
-        regimen_label = regimen_map[int(df['regimen_actual'].iloc[-1])]
-
-        # ── Gauge ────────────────────────────────────────────────────────────────
-        score2 = float(prob) * 100
-
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=score2,
-            number={'suffix': "%"},
-            title={'text': "Market Score"},
-            gauge={
-                'axis': {'range': [0, 100]},
-                'bar': {'color': "black"},
-                'steps': [
-                    {'range': [0,   35], 'color': "#d73027"},
-                    {'range': [35,  50], 'color': "#fc8d59"},
-                    {'range': [50,  65], 'color': "#fee08b"},
-                    {'range': [65, 100], 'color': "#1a9850"},
-                ],
-                'threshold': {
-                    'line': {'color': "black", 'width': 4},
-                    'thickness': 0.75,
-                    'value': score2
-                }
-            }
-        ))
-        fig_gauge.update_layout(height=300, margin=dict(t=40, b=0, l=0, r=0))
-
-    # =============================
-    # INTERFAZ
-    # =============================
-        # ── Output ───────────────────────────────────────────────────────────────
-        st.subheader("📊 Resultado del modelo")
-        col1, col2 = st.columns([1, 2])
-
-        with col1:
-            st.plotly_chart(fig_gauge, use_container_width=True)
-
-        with col2:
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Probabilidad",  f"{prob:.1%}")
-            c2.metric("Predicción",    "Favorable" if pred == 1 else "Desfavorable")
-            c3.metric("Yield Curve",   f"{yc:.2f}")
-            c4.metric("Régimen",       regimen_label)
-
-            st.markdown("### Señal")
-            st.markdown(f"## {señal}")
-
-    # ==============================
-    # GRAFICOS
-    # ==============================
     col1,col2 = st.columns(2)
     col1.plotly_chart(fig3, use_container_width=True)
     col2.plotly_chart(fig4, use_container_width=True)
@@ -546,7 +537,6 @@ if seccion == "🌎 Panorama del mercado":
     df_display = panorama_df3[cols].rename(columns=rename_dict)
 
     st.dataframe(df_display.tail(), hide_index=True)
-
 
 
 # ========================================================================================================================
@@ -688,6 +678,39 @@ elif seccion == "📰 Noticias financieras":
 # 💬 CHAT
 # ========================================================================================================================
 elif seccion == "💬 Chat de apoyo":
+
+    st.write("Dar click en el boton")
+
+    with st.expander("💬 Chat de Apoyo — ¿Qué encontrarás aquí?"):
+        st.markdown("""
+    **Asistente de análisis financiero integral**
+
+    **¿Qué puedes hacer?**
+    - 🏢 Modelo de negocio de empresas
+    - 📊 Razones financieras (análisis independiente)
+    - 🌐 Indicadores macro (tasas, petróleo, oro)
+    - 🔗 Conectar empresa + macro  
+
+    **¿Cómo responde?**
+    - Separa: Empresa | Finanzas | Macro  
+    - Explica: 👉 causa → efecto  
+    - Incluye conclusión + pregunta guía  
+
+    **Importante**
+    - ❌ No da recomendaciones de compra/venta  
+    - ❌ No responde temas fuera de finanzas  
+
+    **Empieza con:**
+    - “Analiza [empresa]”  
+    - “Explícame el entorno actual”
+    """)
+
+
+
+
+
+
+
 
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     client_openai = OpenAI(api_key=OPENAI_API_KEY)
@@ -937,7 +960,7 @@ elif seccion == "📊 Razones financieras":
     st.title("📊 Razones Financieras:")
 
     # ── Parámetro de Ticker ───────────────────────────────────────────────
-    ticker_input = st.text_input("Ingresa el ticker de la empresa", value="JNJ").upper()
+    ticker_input = st.text_input("Ingresa el ticker de la empresa. Ejemplo:JNJ,KO,COST", value="JNJ").upper()
     run = st.button("Cargar datos", type="primary")
 
     # Guardar o reutilizar ticker en session_state

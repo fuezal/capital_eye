@@ -24,116 +24,10 @@ load_dotenv(override=True)
 _DATA_DIR = Path(__file__).resolve().parent
 
 # ==============================
-# INICIO
+#
 # ==============================
 
-ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
 
-# ==============================
-# FUNCIONES AUXILIARES
-# ==============================
-def convert_columns_to_numeric(df, columns_to_exclude=[]):
-    for col in df.columns:
-        if col not in columns_to_exclude:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
-
-def get_data(url, name=""):
-    try:
-        response = requests.get(url)
-        data = response.json()
-
-        # 🔍 DEBUG opcional
-        # st.write(data)
-
-        # ❌ Manejo de errores API
-        if "data" not in data:
-            st.warning(f"⚠️ Error en {name}: {data}")
-            return pd.DataFrame()
-
-        df = pd.DataFrame.from_dict(data["data"])
-
-        # ⏱️ Evitar rate limit
-        time.sleep(12)
-
-        return df
-
-    except Exception as e:
-        st.error(f"❌ Error cargando {name}: {e}")
-        return pd.DataFrame()
-
-def rsi(serie, ventana=14):
-    delta = serie.diff()
-    gain  = delta.clip(lower=0).rolling(ventana).mean()
-    loss  = (-delta.clip(upper=0)).rolling(ventana).mean()
-    rs    = gain / loss.replace(0, np.nan)
-    return 100 - (100 / (1 + rs))
-
-# ==============================
-# DESCARGA DE DATOS
-# ==============================
-@st.cache_data
-def load_data():
-
-    # URLs
-    url_bono2 = f'https://www.alphavantage.co/query?function=TREASURY_YIELD&interval=daily&maturity=2year&apikey={ALPHAVANTAGE_API_KEY}'
-    url_bono10 = f'https://www.alphavantage.co/query?function=TREASURY_YIELD&interval=daily&maturity=10year&apikey={ALPHAVANTAGE_API_KEY}'
-    url_wti = f'https://www.alphavantage.co/query?function=WTI&interval=daily&apikey={ALPHAVANTAGE_API_KEY}'
-    url_brent = f'https://www.alphavantage.co/query?function=BRENT&interval=daily&apikey={ALPHAVANTAGE_API_KEY}'
-    url_gold = f'https://www.alphavantage.co/query?function=GOLD_SILVER_HISTORY&symbol=GOLD&interval=daily&apikey={ALPHAVANTAGE_API_KEY}'
-
-    # Descarga (con protección)
-    bono2_df = get_data(url_bono2, "bono 2Y")
-    bono10_df = get_data(url_bono10, "bono 10Y")
-    wti_df = get_data(url_wti, "WTI")
-    brent_df = get_data(url_brent, "Brent")
-    gold_df = get_data(url_gold, "Gold")
-
-    # ⚠️ Validación mínima
-    if bono2_df.empty or bono10_df.empty or wti_df.empty:
-        st.error("❌ No se pudieron cargar datos críticos. Revisa API key o rate limit.")
-        return pd.DataFrame()
-
-    # Convertir
-    bono2_df = convert_columns_to_numeric(bono2_df, ['date'])
-    bono10_df = convert_columns_to_numeric(bono10_df, ['date'])
-    wti_df = convert_columns_to_numeric(wti_df, ['date'])
-    brent_df = convert_columns_to_numeric(brent_df, ['date'])
-    gold_df = convert_columns_to_numeric(gold_df, ['date'])
-
-    # Renombrar
-    bono2_df = bono2_df.rename(columns=lambda c: c if c == 'date' else 'bono2_' + c)
-    bono10_df = bono10_df.rename(columns=lambda c: c if c == 'date' else 'bono10_' + c)
-    wti_df = wti_df.rename(columns=lambda c: c if c == 'date' else 'wti_' + c)
-    brent_df = brent_df.rename(columns=lambda c: c if c == 'date' else 'brent_' + c)
-    gold_df = gold_df.rename(columns=lambda c: c if c == 'date' else 'gold_' + c)
-
-    # Merge
-    panorama_df = pd.merge(wti_df, brent_df, on='date', how='left')
-    panorama_df = pd.merge(panorama_df, bono2_df, on='date', how='left')
-    panorama_df = pd.merge(panorama_df, bono10_df, on='date', how='left')
-    panorama_df = pd.merge(panorama_df, gold_df, on='date', how='left')
-
-    # Ajustes nombres
-    panorama_df = panorama_df.rename(columns={
-        'wti_value': 'crudeoil_wti_value',
-        'brent_value': 'crudeoil_brent_value',
-        'gold_price': 'gold_price'
-    })
-
-    # Fechas
-    panorama_df['date'] = pd.to_datetime(panorama_df['date'])
-    panorama_df = panorama_df.sort_values('date')
-    panorama_df = panorama_df[panorama_df["date"] >= "2012-01-01"]
-
-    # Limpieza
-    panorama_df[['bono2_value','bono10_value']] = panorama_df[['bono2_value','bono10_value']].ffill()
-
-    cols_precios = ['crudeoil_wti_value','crudeoil_brent_value','gold_price']
-    panorama_df[cols_precios] = panorama_df[cols_precios].ffill().interpolate()
-
-    panorama_df.loc[panorama_df["crudeoil_wti_value"] < 0, "crudeoil_wti_value"] = np.nan
-    panorama_df["crudeoil_wti_value"] = panorama_df["crudeoil_wti_value"].ffill()
 
 
 
@@ -209,7 +103,7 @@ def asignar_regimen(row, UMBRAL_SUBIDA=0.01, UMBRAL_CAIDA=0.05):
 # ==============================
 # CARGA DATA
 # ==============================
-#panorama_df = pd.read_csv(_DATA_DIR / "panorama_df.csv")
+panorama_df = pd.read_csv(_DATA_DIR / "panorama_df.csv")
 panorama_df['date'] = pd.to_datetime(panorama_df['date'])
 panorama_df = panorama_df.sort_values('date').reset_index(drop=True)
 panorama_df = panorama_df.drop(columns=['Unnamed: 0'], errors='ignore')
