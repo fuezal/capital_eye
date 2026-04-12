@@ -1,5 +1,5 @@
 # capital_eye
-Herramienta financiera
+Herramienta financiera para conocer el panorama general del mercado financiero estadounidense
 
 ## Instalacion
 1. Clona este repositorio y sitúate en su carpeta raíz.
@@ -8,8 +8,13 @@ Herramienta financiera
 4. Copia .env.example a .env y rellena OPENAI_API_KEY y ALPHAVANTAGE_API_KEY con tus claves secretas.
 5. Ejecuta la aplicación con uv run streamlit run interfaz.py y abre el navegador cuando Streamlit indique la URL local.
 
+## Descarga dataset 
+En caso de que el usuario desee el dataset en tiempo real de panorama_df, favor de correr el codigo main_05.py para 
+poder obtenerlo, mientras se puede usar el dataset panorama_df que se encuentra en el repositorio
+
 ## Arbol de dependencias
 
+```text
 capital-eye 
 ├── beautifulsoup4 v4.14.3
 │   ├── soupsieve v2.8.3
@@ -113,3 +118,4 @@ capital-eye
 │   ├── click v8.3.1
 │   └── h11 v0.16.0
 └── watchdog v6.0.0
+```
