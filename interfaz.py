@@ -65,7 +65,7 @@ logo_bar = """
 st.markdown(logo_bar, unsafe_allow_html=True)
 
 # Contenido del dashboard
-#st.write("Herramienta financiera")
+st.write("📄 Para navegar en la página, usa el panel lateral para alternar entre las secciones de la página")
 
 # ==============================
 # NAVEGACIÓN
