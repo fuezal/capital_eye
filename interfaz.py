@@ -407,9 +407,8 @@ if seccion == "🌎 Panorama del mercado":
                 ])
             )
 
-            st.markdown("### 📊 Market Snapshot")
+            st.markdown("### 📊 Resumen")
             st.dataframe(styled_table, use_container_width=True, height=420)
-
 
 
     #graficos
