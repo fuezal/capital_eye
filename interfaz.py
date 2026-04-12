@@ -706,12 +706,6 @@ elif seccion == "💬 Chat de apoyo":
     """)
 
 
-
-
-
-
-
-
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     client_openai = OpenAI(api_key=OPENAI_API_KEY)
     model_openai = "gpt-5.4-mini"
@@ -775,6 +769,7 @@ elif seccion == "💬 Chat de apoyo":
 # 📊 RAZONES FINANCIERAS
 # ========================================================================================================================
 elif seccion == "📊 Razones financieras":
+
     ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY") 
 
     # ==============================
@@ -960,7 +955,7 @@ elif seccion == "📊 Razones financieras":
     st.title("📊 Razones Financieras:")
 
     # ── Parámetro de Ticker ───────────────────────────────────────────────
-    ticker_input = st.text_input("Ingresa el ticker de la empresa. Ejemplo:JNJ,KO,COST", value="JNJ").upper()
+    ticker_input = st.text_input("Ingresa el ticker de alguna empresa del mercado estadounidense. Ejemplo:JNJ,KO,COST", value="JNJ").upper()
     run = st.button("Cargar datos", type="primary")
 
     # Guardar o reutilizar ticker en session_state
