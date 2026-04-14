@@ -1016,5 +1016,5 @@ elif seccion == "📊 Razones financieras":
             st.subheader("📈 Ratios Financieros")
             st.plotly_chart(fig1, use_container_width=True)
         with col2:
-            st.subheader("📊 Crecimiento YoY (%)")
+            st.subheader("📊 Crecimiento (%)")
             st.plotly_chart(fig2, use_container_width=True)
