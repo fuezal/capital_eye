@@ -1018,3 +1018,20 @@ elif seccion == "📊 Razones financieras":
         with col2:
             st.subheader("📊 Crecimiento (%)")
             st.plotly_chart(fig2, use_container_width=True)
+
+    # ── Notas finales ───────────────────────────────────────────────
+    st.markdown("### 📌 Notas:")
+
+    st.markdown("""
+    - Rotación de inventarios ⬆️: Un valor alto indica una mayor eficiencia, ya que implica que el inventario 
+    permanece menos tiempo en almacén y se vende con mayor rapidez. 
+    - Razón de solvencia o endeudamiento ⬇️: Un valor alto, indica que una mayor parte de los activos está 
+    financiada con deuda, lo que puede representar un mayor riesgo financiero. 
+    - Prueba ácida ⬆️: Un valor mayor a 1 indica una adecuada capacidad para cubrir obligaciones de corto plazo 
+    sin depender de la venta de inventario.
+    - Rotación de cartera ⬆️: Un valor alto indica mayor eficiencia en la cobranza.
+    - Razón circulante ⬆️: Un valor mayor a 1 indica que la empresa cuenta con recursos suficientes para hacer 
+    frente a sus compromisos a corto plazo.
+    """)
+
+    st.markdown("En caso de tener alguna duda conceptual favor de usar el chat de apoyo.")
