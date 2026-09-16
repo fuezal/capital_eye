@@ -12,10 +12,12 @@ Herramienta financiera para el monitoreo y análisis de acciones del mercado est
 4. Copia .env.example a .env y rellena OPENAI_API_KEY y ALPHAVANTAGE_API_KEY con tus claves secretas.
 5. Ejecuta la aplicación con uv run streamlit run interfaz.py y abre el navegador cuando Streamlit indique la URL local.
 
+
+
 ## Arbol de dependencias
 
 ```text
-capital-eye 
+capital-eye v0.1.0
 ├── beautifulsoup4 v4.14.3
 │   ├── soupsieve v2.8.3
 │   └── typing-extensions v4.15.0
@@ -117,6 +119,24 @@ capital-eye
 ├── uvicorn v0.43.0
 │   ├── click v8.3.1
 │   └── h11 v0.16.0
-└── watchdog v6.0.0
+├── watchdog v6.0.0
+└── yfinance v1.7.0
+    ├── beautifulsoup4 v4.14.3 (*)
+    ├── curl-cffi v0.16.3
+    │   ├── certifi v2026.2.25
+    │   └── cffi v2.1.1
+    │       └── pycparser v3.0
+    ├── lxml v6.1.3
+    ├── multitasking v0.0.13
+    ├── numpy v2.4.4
+    ├── pandas v3.0.2 (*)
+    ├── peewee v4.5.1
+    ├── platformdirs v4.11.9
+    ├── protobuf v7.34.1
+    ├── pytz v2026.3.post1
+    ├── requests v2.33.1 (*)
+    └── websockets v17.1
 ```
+
+
 
