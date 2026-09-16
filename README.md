@@ -1,16 +1,16 @@
 # capital_eye
-Herramienta financiera para conocer el panorama general del mercado financiero estadounidense
+
+Herramienta financiera para el monitoreo y análisis de acciones del mercado estadounidense mediante análisis fundamental.
+
+**Importante:** El uso de la herramienta está sujeto a un límite diario debido a las restricciones en el número de consultas permitidas por las APIs externas utilizadas para obtener información financiera y de mercado.
 
 ## Instalacion
+
 1. Clona este repositorio y sitúate en su carpeta raíz.
 2. Crea un entorno virtual con Python 3.13 o superior (por ejemplo python -m venv .venv) y actívalo.
 3. Instala uv si aún no lo tienes (pip install uv) y luego ejecuta uv install para resolver dependencias usando pyproject.toml.
 4. Copia .env.example a .env y rellena OPENAI_API_KEY y ALPHAVANTAGE_API_KEY con tus claves secretas.
 5. Ejecuta la aplicación con uv run streamlit run interfaz.py y abre el navegador cuando Streamlit indique la URL local.
-
-## Descarga dataset 
-En caso de que el usuario desee el dataset en tiempo real de panorama_df, favor de correr el codigo main_05.py para 
-poder obtenerlo, mientras se puede usar el dataset panorama_df que se encuentra en el repositorio
 
 ## Arbol de dependencias
 
@@ -119,3 +119,4 @@ capital-eye
 │   └── h11 v0.16.0
 └── watchdog v6.0.0
 ```
+

@@ -17,4 +17,5 @@ dependencies = [
     "streamlit>=1.56.0",
     "uvicorn>=0.43.0",
     "watchdog>=6.0.0",
+    "yfinance>=1.7.0",
 ]
