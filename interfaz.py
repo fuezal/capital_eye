@@ -1687,7 +1687,7 @@ st.markdown(
         margin-top: 0px;
         margin-bottom: 20px;
     ">
-        {ticker} &nbsp;•&nbsp; {sector} &nbsp;•&nbsp; {industry}
+        {ticker}
     </div>
     """,
     unsafe_allow_html=True
