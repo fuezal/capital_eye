@@ -1674,8 +1674,8 @@ st.markdown(
     unsafe_allow_html=True
 )
 #info["longName"]          # Microsoft Corporation
-sector = info["sector"]             # Technology
-industry = info["industry"]           # Software - Infrastructure
+#sector = info["sector"]             # Technology
+#industry = info["industry"]           # Software - Infrastructure
 
 st.markdown(
     f"""
